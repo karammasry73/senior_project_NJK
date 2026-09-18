@@ -1,0 +1,28 @@
+# Requires Python <=3.13 (paddlepaddle has no 3.14 wheels yet). This repo's
+# .venv was built with: uv python install 3.12 && uv venv --python 3.12 .venv
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+pydantic-settings>=2.6
+httpx>=0.27
+python-multipart>=0.0.12
+
+# Phase 2 - document processing pipeline
+# Install CPU-only torch/torchvision FIRST (this machine has no NVIDIA GPU):
+#   uv pip install --python .venv/bin/python torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# Otherwise ultralytics pulls the default CUDA build (~2GB of unused nvidia-* packages).
+ultralytics>=8.4
+paddleocr>=3.7
+paddlepaddle>=3.3
+opencv-python-headless>=4.10
+pymupdf>=1.24
+pillow>=10.4
+numpy>=1.26,<2.3
+
+# Phase 3 - email management (Gmail API + Ollama)
+google-api-python-client>=2.150
+google-auth-httplib2>=0.2
+google-auth-oauthlib>=1.2
+
+# User accounts
+bcrypt>=4.2

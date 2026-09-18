@@ -1,0 +1,22 @@
+# YOLO dataset config for exam layout detection.
+# Class order here MUST match the class order used when exporting labels
+# from your annotation tool (makesense.ai lets you set this explicitly).
+# Edit `names` before annotating — changing it after labeling means
+# every label file's class indices silently point to the wrong class.
+
+path: /home/hexbit/Dev/sme-automation/backend/data/datasets/exams
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: lu_logo
+  1: question
+  2: subject
+  3: date
+  4: faculty
+  5: duration
+  6: semester
+  7: department
+  8: university_name
+  9: instructions

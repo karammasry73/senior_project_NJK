@@ -1,0 +1,17 @@
+# make-sense.ai annotation tool - cloned separately, not project source
+/tools/
+
+# Python
+backend/.venv/
+**/__pycache__/
+*.pyc
+
+# Secrets - never commit real credentials
+backend/.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS/editor cruft
+.DS_Store
