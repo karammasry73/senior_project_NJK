@@ -15,12 +15,17 @@ class Settings(BaseSettings):
     # also available on this machine: qwen3.5:2b (faster), qwen3.5:9b (better),
     # huihui_ai/dolphin3-abliterated:latest. Override via SME_OLLAMA_MODEL.
     ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "qwen3.5:4b"
+    ollama_model: str = "qwen3.5:9b"
     ollama_timeout_seconds: float = 5.0
 
     # YOLO - two specialized models, chosen per-document by domain
     yolo_weights_path_exams: Path = BACKEND_DIR / "models" / "exams.pt"
     yolo_weights_path_invoices: Path = BACKEND_DIR / "models" / "invoices.pt"
+    # Live camera preview: lower floor than the capture pipeline (0.5) because
+    # webcam frames are noisier/lower-resolution; and upscale small frames to
+    # ~training imgsz so small objects still register.
+    yolo_preview_confidence: float = 0.25
+    yolo_preview_min_input_px: int = 960
 
     # PaddleOCR
     paddleocr_lang: str = "en"

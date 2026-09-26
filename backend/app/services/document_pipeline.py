@@ -16,6 +16,8 @@ import re
 import tempfile
 from pathlib import Path
 
+from starlette.concurrency import run_in_threadpool
+
 from app.services import ocr_processor, yolo_detector
 
 _DATE_RE = re.compile(r"\b(\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4})\b")
@@ -141,15 +143,10 @@ def _crop_and_ocr_regions(image_path: str, regions: list[dict]) -> dict[str, lis
     return texts
 
 
-async def process_document(file_path: str, file_type: str, domain: str = "exams") -> dict:
-    """Run the detect -> OCR -> structure pipeline for one uploaded document.
-
-    `domain` selects which fine-tuned YOLO model runs ("exams" or "invoices")
-    and, for invoices, how detected regions map to structured fields.
-
-    Returns a dict matching the shape stored in Documents.structured_json,
-    plus raw_text and a confidence estimate for the Documents row.
-    """
+def _process_document_sync(file_path: str, file_type: str, domain: str) -> dict:
+    """Synchronous core of process_document - runs in a worker thread (YOLO + OCR
+    are CPU-bound and would otherwise block the asyncio event loop for the whole
+    server, freezing /docs and every other request while a document processes)."""
     image_path = render_to_image(file_path, file_type)
 
     try:
@@ -188,3 +185,15 @@ async def process_document(file_path: str, file_type: str, domain: str = "exams"
         "confidence": avg_confidence,
         "fields": fields,
     }
+
+
+async def process_document(file_path: str, file_type: str, domain: str = "exams") -> dict:
+    """Run the detect -> OCR -> structure pipeline for one uploaded document.
+
+    `domain` selects which fine-tuned YOLO model runs ("exams" or "invoices")
+    and, for invoices, how detected regions map to structured fields.
+
+    Returns a dict matching the shape stored in Documents.structured_json,
+    plus raw_text and a confidence estimate for the Documents row.
+    """
+    return await run_in_threadpool(_process_document_sync, file_path, file_type, domain)

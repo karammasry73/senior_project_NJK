@@ -1,10 +1,13 @@
+import io
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.database import db_session
@@ -88,8 +91,92 @@ async def upload_document(file: UploadFile, background_tasks: BackgroundTasks) -
 @router.get("", response_model=list[DocumentOut])
 async def list_documents() -> list[DocumentOut]:
     with db_session() as conn:
-        rows = conn.execute("SELECT * FROM documents ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT * FROM documents WHERE doc_type = 'document' ORDER BY id DESC").fetchall()
     return [_row_to_out(r) for r in rows]
+
+
+def _detect_preview_sync(file_data: bytes, domain: str) -> DetectPreviewResponse:
+    """Synchronous core of detect_preview - runs in a worker thread so YOLO + OCR
+    on a single frame don't block the event loop for every other request."""
+    from PIL import Image
+
+    # Read the frame straight from memory. Writing to an open NamedTemporaryFile
+    # and then Image.open()-ing the same path fails on Windows (the handle is
+    # still locked), which made every live preview request 500 with
+    # PermissionError. Only disk artifacts that must survive long enough for
+    # YOLO/PaddleOCR are materialized, always delete=False + closed + unlinked.
+    with Image.open(io.BytesIO(file_data)) as opened:
+        img = opened.convert("RGB")
+    width, height = img.size
+
+    # Upscale small frames (webcams) to ~training imgsz so small objects
+    # register - aspect preserved, boxes mapped back below. Detection runs with
+    # a lower confidence floor than the capture pipeline because live frames are
+    # noisier/lower-res; a box shown live just hints "aim here", the capture
+    # path still enforces the strict 0.5 threshold.
+    longest = max(width, height)
+    scale = 1.0
+    detection_img = img
+    if longest < settings.yolo_preview_min_input_px:
+        scale = settings.yolo_preview_min_input_px / longest
+        detection_img = img.resize((round(width * scale), round(height * scale)), Image.LANCZOS)
+
+    detection_path = None
+    try:
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+        detection_img.save(tmp.name, "JPEG", quality=92)
+        tmp.close()
+        detection_path = tmp.name
+
+        try:
+            raw_regions = yolo_detector.detect_regions(
+                detection_path,
+                domain=domain,
+                confidence_threshold=settings.yolo_preview_confidence,
+            )
+        except Exception as exc:  # noqa: BLE001 - a failed preview frame just yields no boxes
+            print(f"detect-preview failed: {exc}")
+            raw_regions = []
+    finally:
+        if detection_path:
+            os.unlink(detection_path)
+
+    if scale != 1.0:
+        for r in raw_regions:
+            r["box"] = [x / scale for x in r["box"]]
+
+    ocr_budget = sorted(raw_regions, key=lambda r: r["confidence"], reverse=True)[:_LIVE_OCR_MAX_REGIONS]
+    ocr_ids = {id(r) for r in ocr_budget}
+
+    regions = []
+    for r in raw_regions:
+        text = None
+        if id(r) in ocr_ids:
+            x1, y1, x2, y2 = r["box"]
+            crop = img.crop((max(0, x1), max(0, y1), min(width, x2), min(height, y2)))
+            if crop.width >= 4 and crop.height >= 4:
+                crop_path = None
+                try:
+                    crop_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                    crop.save(crop_tmp.name, "PNG")
+                    crop_tmp.close()
+                    crop_path = crop_tmp.name
+                    crop_result = ocr_processor.extract_text(crop_path)
+                    text = crop_result["full_text"].strip() or None
+                finally:
+                    if crop_path:
+                        os.unlink(crop_path)
+        regions.append(
+            RegionOut(
+                label=r["label"],
+                confidence=r["confidence"],
+                box=r["box"],
+                text=text,
+                pattern_match=field_patterns.check_pattern(domain, r["label"], text or ""),
+            )
+        )
+
+    return DetectPreviewResponse(regions=regions, image_width=width, image_height=height)
 
 
 @router.post("/detect-preview", response_model=DetectPreviewResponse)
@@ -104,48 +191,7 @@ async def detect_preview(file: UploadFile, domain: str = "exams") -> DetectPrevi
     reference desktop scripts use), so a dense frame can't blow out latency -
     full per-region OCR for every box still only happens once, on capture.
     """
-    from PIL import Image
-
-    with tempfile.NamedTemporaryFile(suffix=".jpg") as tmp:
-        tmp.write(await file.read())
-        tmp.flush()
-        with Image.open(tmp.name) as img:
-            width, height = img.size
-            img = img.convert("RGB")
-
-            try:
-                # 0.5 (at least 50% confidence) - same floor as the full pipeline,
-                # so live preview doesn't show boxes it wouldn't trust on capture.
-                raw_regions = yolo_detector.detect_regions(tmp.name, domain=domain)
-            except Exception as exc:  # noqa: BLE001 - a failed preview frame just yields no boxes
-                print(f"detect-preview failed: {exc}")
-                raw_regions = []
-
-            ocr_budget = sorted(raw_regions, key=lambda r: r["confidence"], reverse=True)[:_LIVE_OCR_MAX_REGIONS]
-            ocr_ids = {id(r) for r in ocr_budget}
-
-            regions = []
-            for r in raw_regions:
-                text = None
-                if id(r) in ocr_ids:
-                    x1, y1, x2, y2 = r["box"]
-                    crop = img.crop((max(0, x1), max(0, y1), min(width, x2), min(height, y2)))
-                    if crop.width >= 4 and crop.height >= 4:
-                        with tempfile.NamedTemporaryFile(suffix=".png") as crop_tmp:
-                            crop.save(crop_tmp.name)
-                            crop_result = ocr_processor.extract_text(crop_tmp.name)
-                            text = crop_result["full_text"].strip() or None
-                regions.append(
-                    RegionOut(
-                        label=r["label"],
-                        confidence=r["confidence"],
-                        box=r["box"],
-                        text=text,
-                        pattern_match=field_patterns.check_pattern(domain, r["label"], text or ""),
-                    )
-                )
-
-    return DetectPreviewResponse(regions=regions, image_width=width, image_height=height)
+    return await run_in_threadpool(_detect_preview_sync, await file.read(), domain)
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)
@@ -169,7 +215,7 @@ async def get_document_image(document_id: int):
     if row is None:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    image_path = Path(document_pipeline.render_to_image(row["file_path"], row["file_type"]))
+    image_path = Path(await run_in_threadpool(document_pipeline.render_to_image, row["file_path"], row["file_type"]))
     if not image_path.exists():
         raise HTTPException(status_code=404, detail="Image file not found on disk")
 

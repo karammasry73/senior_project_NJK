@@ -40,7 +40,7 @@ async def process_invoice(file: UploadFile) -> InvoiceOut:
 
     with db_session() as conn:
         cur = conn.execute(
-            "INSERT INTO documents (filename, file_path, file_type, status) VALUES (?, ?, ?, ?)",
+            "INSERT INTO documents (filename, file_path, file_type, doc_type, status) VALUES (?, ?, ?, 'invoice', ?)",
             (file.filename, str(dest), file_type, "processing"),
         )
         document_id = cur.lastrowid

@@ -3,8 +3,8 @@ __pycache__/
 *.pyc
 data/*.db
 data/uploads/
-models/*.pt
 *.pt
+!models/*.pt
 .env
 
 # training data is large binary content, not source - don't commit it
@@ -12,3 +12,7 @@ data/raw/*
 !data/raw/exams/.gitkeep
 data/datasets/*/images/
 data/datasets/*/labels/
+
+# training run artifacts (plots/checkpoints) - the shipped weights in
+# models/ are what the app actually loads; these are just training output
+runs/

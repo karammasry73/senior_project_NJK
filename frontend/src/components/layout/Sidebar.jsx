@@ -4,7 +4,7 @@ import {
   FileText,
   Receipt,
   Mail,
-  Mic,
+  Bot,
   Settings,
   Database,
   Users,
@@ -16,7 +16,7 @@ const navItems = [
   { to: '/documents', label: 'Documents', icon: FileText },
   { to: '/invoices', label: 'Invoices', icon: Receipt },
   { to: '/emails', label: 'Email Manager', icon: Mail },
-  { to: '/voice', label: 'Voice Assistant', icon: Mic },
+  { to: '/voice', label: 'AI Assistant', icon: Bot },
 ];
 
 export default function Sidebar({ user, onLogout }) {

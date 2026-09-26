@@ -22,22 +22,36 @@ async def check_status() -> ServiceStatus:
         return ServiceStatus(available=False, detail=f"error: {exc}")
 
 
-async def generate(prompt: str, system: str | None = None, json_mode: bool = False) -> str:
+async def generate(
+    prompt: str,
+    system: str | None = None,
+    json_mode: bool = False,
+    temperature: float = 0.2,
+    max_tokens: int = 600,
+) -> str:
     """Call Ollama's /api/generate. Used by the document pipeline and email services (Phase 3).
 
-    think=False matters a lot here: qwen3.5 (this machine's default model) is
-    a reasoning model that otherwise emits a long internal chain-of-thought
+    Per-task tuning: the caller picks `temperature`/`max_tokens` to match the job.
+    A classification is a deterministic single label (temperature 0, a handful of
+    tokens); a summary is neutral; a drafted reply gets a little more freedom.
+    `num_predict` is a safety net so a rambling answer can't burn CPU time.
+
+    think=False matters a lot: qwen3.5 (this machine's default model) is a
+    reasoning model that otherwise emits a long internal chain-of-thought
     before its actual answer - measured at 3000+ tokens (7+ minutes on this
     CPU) for a five-word reply with thinking left on. With it off, the same
-    request takes about 1.5s. num_predict is a second safety net in case a
-    future model doesn't support the think flag and rambles anyway.
+    request takes about 1.5s. It stays unconditionally off regardless of task.
     """
     payload: dict = {
         "model": settings.ollama_model,
         "prompt": prompt,
         "stream": False,
         "think": False,
-        "options": {"num_predict": 600},
+        "options": {
+            "temperature": temperature,
+            "top_p": 0.9,
+            "num_predict": max_tokens,
+        },
     }
     if system:
         payload["system"] = system

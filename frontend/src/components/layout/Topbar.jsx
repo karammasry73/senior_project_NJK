@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { Search, Bell, Mic, Cpu, Sun, Moon } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const pageTitles = {
   '/dashboard': 'Dashboard',
   '/documents': 'Document Management',
   '/invoices': 'Invoice Processing',
   '/emails': 'Email Manager',
-  '/voice': 'Voice Assistant',
+  '/voice': 'AI Assistant',
   '/settings': 'Settings',
 };
 
 export default function Topbar({ dark, onToggleTheme }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const title = pageTitles[location.pathname] || 'Dashboard';
 
@@ -63,7 +64,10 @@ export default function Topbar({ dark, onToggleTheme }) {
           <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
         </button>
 
-        <button className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90">
+        <button
+          onClick={() => navigate('/voice')}
+          className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90"
+        >
           <Mic className="h-4 w-4" />
           Start Voice
         </button>

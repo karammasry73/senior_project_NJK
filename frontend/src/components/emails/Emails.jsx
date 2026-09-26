@@ -1,19 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Mail,
   Search,
   Loader2,
   Sparkles,
   Bot,
-  Send,
-  X,
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
   ExternalLink,
+  LayoutList,
+  LayoutGrid,
+  History,
+  Undo2,
+  EyeOff,
 } from 'lucide-react';
 import {
   getEmailAuthStatus,
+  getEmailAccount,
   getEmailAuthUrl,
   syncEmails,
   listEmails,
@@ -22,21 +26,29 @@ import {
   summarizeEmail,
   draftEmail,
   sendEmail,
+  saveEmailPosition,
+  restoreEmail,
+  markEmailRead,
+  deleteEmail,
+  nameSender,
   getSystemStatus,
 } from '../../services/api';
-
-const CATEGORY_META = {
-  urgent: { label: 'Urgent', color: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300' },
-  follow_up: { label: 'Follow-up', color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' },
-  informational: { label: 'Info', color: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' },
-  action: { label: 'Action', color: 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300' },
-  spam: { label: 'Spam', color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
-};
+import EmailSpace from './EmailSpace';
+import EmailDetailPanel from './EmailDetailPanel';
+import { CATEGORY_META } from './emailMeta';
 
 const CATEGORY_FILTERS = ['All', 'Urgent', 'Follow-up', 'Info', 'Action', 'Spam'];
 
+const RANGE_PRESETS = [
+  { label: '30 days', days: 30 },
+  { label: '60 days', days: 60 },
+  { label: '90 days', days: 90 },
+  { label: 'All', days: null },
+];
+
 export default function Emails() {
   const [authStatus, setAuthStatus] = useState(null);
+  const [accountEmail, setAccountEmail] = useState(null);
   const [ollamaAvailable, setOllamaAvailable] = useState(null);
   const [emails, setEmails] = useState([]);
   const [loadError, setLoadError] = useState(null);
@@ -49,7 +61,21 @@ export default function Emails() {
   const [actionError, setActionError] = useState(null);
   const [actionLoading, setActionLoading] = useState(null); // 'classify' | 'summarize' | 'draft' | 'send' | null
   const [draftText, setDraftText] = useState('');
+  const [draftInstructions, setDraftInstructions] = useState('');
   const [connectBanner, setConnectBanner] = useState(null);
+  const [view, setView] = useState('list'); // 'list' | 'board'
+  const [composing, setComposing] = useState(false); // manual (no-AI) reply box forced open, in the list modal
+  const [classifyingAll, setClassifyingAll] = useState(false);
+  const [classifyAllProgress, setClassifyAllProgress] = useState(null); // {done, total}
+  const [range, setRange] = useState({ label: 'Recent', after: null, before: null });
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [lastDeleted, setLastDeleted] = useState(null); // {email, timeoutId}
+  const [hidePromotions, setHidePromotions] = useState(
+    () => localStorage.getItem('sme-hide-promotions') === '1'
+  );
+  const undoTimeoutRef = useRef(null);
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -89,9 +115,14 @@ export default function Emails() {
     refreshAuth().then((status) => {
       if (status?.connected) refreshEmails();
     });
+    getEmailAccount()
+      .then((res) => setAccountEmail(res.email))
+      .catch(() => setAccountEmail(null));
   }, [refreshAuth, refreshEmails]);
 
   useEffect(() => {
+    setComposing(false);
+    setDraftInstructions('');
     if (selectedId == null) {
       setSelectedDetail(null);
       setActionError(null);
@@ -116,15 +147,90 @@ export default function Emails() {
     }
   }
 
+  useEffect(() => {
+    localStorage.setItem('sme-hide-promotions', hidePromotions ? '1' : '0');
+  }, [hidePromotions]);
+
   async function handleSync() {
     setSyncing(true);
     try {
-      await syncEmails();
+      await syncEmails(range.after, range.before);
       await refreshEmails();
     } catch (err) {
       setLoadError(err.message);
     } finally {
       setSyncing(false);
+    }
+  }
+
+  function applyPreset(days) {
+    const after = days == null ? null : Math.floor(Date.now() / 1000) - days * 86400;
+    setRange({ label: days == null ? 'All' : `${days} days`, after, before: null });
+    setRangeOpen(false);
+  }
+
+  function applyCustomRange() {
+    if (!customFrom || !customTo) return;
+    const after = Math.floor(new Date(customFrom).getTime() / 1000);
+    const before = Math.floor(new Date(customTo).getTime() / 1000) + 86400; // include the whole "to" day
+    if (after > before) return;
+    setRange({ label: `${customFrom} → ${customTo}`, after, before });
+    setRangeOpen(false);
+  }
+
+  function handleBoardDelete(email) {
+    setEmails((prev) => prev.filter((e) => e.id !== email.id));
+    if (selectedId === email.id) setSelectedId(null);
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    undoTimeoutRef.current = setTimeout(() => setLastDeleted(null), 8000);
+    setLastDeleted(email);
+  }
+
+  async function handleUndoDelete() {
+    if (!lastDeleted) return;
+    clearTimeout(undoTimeoutRef.current);
+    const email = lastDeleted;
+    setLastDeleted(null);
+    try {
+      const restored = await restoreEmail(email);
+      setEmails((prev) => [restored, ...prev]);
+    } catch (err) {
+      setLoadError(err.message);
+    }
+  }
+
+  async function handlePositionChange(id, x, y) {
+    try {
+      await saveEmailPosition(id, x, y);
+    } catch (err) {
+      setLoadError(err.message);
+    }
+  }
+
+  async function handleMarkSelected() {
+    if (!selectedDetail) return;
+    await runAction('mark', (id) => markEmailRead(id, !selectedDetail.is_read));
+  }
+
+  async function handleRenameSelected() {
+    if (!selectedDetail) return;
+    const name = window.prompt('Custom name for this sender:', selectedDetail.custom_name || '');
+    if (!name) return;
+    await runAction('rename', (id) => nameSender(id, name));
+    refreshEmails();
+  }
+
+  async function handleDeleteSelected() {
+    if (!selectedDetail) return;
+    setActionLoading('delete');
+    setActionError(null);
+    try {
+      await deleteEmail(selectedId);
+      handleBoardDelete(selectedDetail);
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionLoading(null);
     }
   }
 
@@ -149,7 +255,10 @@ export default function Emails() {
     try {
       const updated = await sendEmail(selectedId, draftText);
       setSelectedDetail(updated);
-      setEmails((prev) => prev.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)));
+      // A send also inserts a new "out" row in the same thread on the
+      // backend (the reply itself) - reload the full list so that new
+      // branch node shows up on the board, not just the updated original.
+      await refreshEmails();
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -157,12 +266,43 @@ export default function Emails() {
     }
   }
 
+  function switchView(next) {
+    setView(next);
+    setSelectedId(null);
+  }
+
+  function handleBoardUpdate(updated) {
+    setEmails((prev) => prev.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)));
+  }
+
+  async function handleClassifyAll() {
+    const targets = emails.filter((e) => !e.category);
+    if (targets.length === 0) return;
+    setClassifyingAll(true);
+    setClassifyAllProgress({ done: 0, total: targets.length });
+    // Sequential, not Promise.all: Ollama runs one local model on this CPU,
+    // so firing every request at once would just queue them anyway while
+    // making the progress counter useless.
+    for (let i = 0; i < targets.length; i++) {
+      try {
+        const updated = await classifyEmail(targets[i].id);
+        setEmails((prev) => prev.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)));
+      } catch (err) {
+        setLoadError(err.message);
+      }
+      setClassifyAllProgress({ done: i + 1, total: targets.length });
+    }
+    setClassifyingAll(false);
+    setClassifyAllProgress(null);
+  }
+
   const filtered = emails.filter((e) => {
     const haystack = `${e.subject ?? ''} ${e.sender ?? ''}`.toLowerCase();
     const matchesSearch = haystack.includes(search.toLowerCase());
     const matchesCategory =
       categoryFilter === 'All' || CATEGORY_META[e.category]?.label === categoryFilter;
-    return matchesSearch && matchesCategory;
+    const matchesPromotions = !hidePromotions || e.gmail_category !== 'promotions';
+    return matchesSearch && matchesCategory && matchesPromotions;
   });
 
   return (
@@ -264,14 +404,109 @@ export default function Emails() {
                 </button>
               ))}
             </div>
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Syncing...' : 'Sync Gmail'}
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-700">
+                <button
+                  onClick={() => switchView('list')}
+                  title="List view"
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    view === 'list'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                  }`}
+                >
+                  <LayoutList className="h-3.5 w-3.5" />
+                  List
+                </button>
+                <button
+                  onClick={() => switchView('board')}
+                  title="Board view - categorized 2D space with threaded branches"
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    view === 'board'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                  }`}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  Map
+                </button>
+              </div>
+              <button
+                onClick={() => setHidePromotions((v) => !v)}
+                title="Hide promotional emails (Gmail's own Promotions category)"
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  hidePromotions
+                    ? 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                <EyeOff className="h-3.5 w-3.5" />
+                Promotions
+              </button>
+              <button
+                onClick={handleClassifyAll}
+                disabled={classifyingAll || !emails.some((e) => !e.category)}
+                title="Classify every unclassified email with Ollama"
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                {classifyingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                {classifyingAll ? `Classifying ${classifyAllProgress.done}/${classifyAllProgress.total}...` : 'Classify All'}
+              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setRangeOpen((v) => !v)}
+                  title="Choose how far back to sync"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <History className="h-3.5 w-3.5" />
+                  {range.label}
+                </button>
+                {rangeOpen && (
+                  <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                    <div className="flex flex-wrap gap-1.5">
+                      {RANGE_PRESETS.map((p) => (
+                        <button
+                          key={p.label}
+                          onClick={() => applyPreset(p.days)}
+                          className="rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2.5 space-y-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+                      <input
+                        type="date"
+                        value={customFrom}
+                        onChange={(e) => setCustomFrom(e.target.value)}
+                        className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                      <input
+                        type="date"
+                        value={customTo}
+                        onChange={(e) => setCustomTo(e.target.value)}
+                        className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                      <button
+                        onClick={applyCustomRange}
+                        disabled={!customFrom || !customTo}
+                        className="w-full rounded-md bg-indigo-600 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        Apply custom range
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Syncing...' : 'Sync Gmail'}
+              </button>
+            </div>
           </div>
 
           <div className="relative border-b border-slate-100 p-4 dark:border-slate-800">
@@ -285,161 +520,111 @@ export default function Emails() {
             />
           </div>
 
-          <div className="divide-y divide-slate-50 dark:divide-slate-800/60">
-            {filtered.length === 0 && (
-              <p className="px-5 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
-                {emails.length === 0 ? 'No emails synced yet. Click "Sync Gmail" to fetch your inbox.' : 'No emails match this filter.'}
-              </p>
-            )}
-            {filtered.map((email) => {
-              const meta = CATEGORY_META[email.category];
-              return (
-                <button
-                  key={email.id}
-                  onClick={() => setSelectedId(email.id)}
-                  className="flex w-full items-center gap-4 px-5 py-3.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
-                    {(email.sender ?? '?').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
-                      {email.subject || '(no subject)'}
-                    </p>
-                    <p className="truncate text-xs text-slate-400 dark:text-slate-500">{email.sender}</p>
-                  </div>
-                  {email.summary && (
-                    <span className="flex shrink-0 items-center gap-1 text-[11px] text-purple-400">
-                      <Sparkles className="h-3 w-3" />
-                      Summarized
-                    </span>
-                  )}
-                  {email.sent && (
-                    <span className="flex shrink-0 items-center gap-1 text-[11px] text-emerald-500">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Replied
-                    </span>
-                  )}
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${meta?.color ?? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}
+          {view === 'board' ? (
+            <div className="p-4">
+              <EmailSpace
+                emails={filtered}
+                accountEmail={accountEmail}
+                onUpdate={handleBoardUpdate}
+                onSent={refreshEmails}
+                onPositionChange={handlePositionChange}
+                onDelete={handleBoardDelete}
+              />
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-50 dark:divide-slate-800/60">
+              {filtered.length === 0 && (
+                <p className="px-5 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                  {emails.length === 0 ? 'No emails synced yet. Click "Sync Gmail" to fetch your inbox.' : 'No emails match this filter.'}
+                </p>
+              )}
+              {filtered.map((email) => {
+                const meta = CATEGORY_META[email.category];
+                return (
+                  <button
+                    key={email.id}
+                    onClick={() => setSelectedId(email.id)}
+                    className="flex w-full items-center gap-4 px-5 py-3.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
                   >
-                    {meta?.label ?? 'Unclassified'}
-                  </span>
-                </button>
-              );
-            })}
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
+                      {(email.sender ?? '?').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`truncate text-sm text-slate-800 dark:text-slate-200 ${
+                          !email.is_read && email.direction !== 'out' ? 'font-bold' : 'font-medium'
+                        }`}
+                      >
+                        {email.subject || '(no subject)'}
+                      </p>
+                      <p className="truncate text-xs text-slate-400 dark:text-slate-500">
+                        {email.custom_name || email.sender || 'Unknown'}
+                      </p>
+                    </div>
+                    {!email.is_read && email.direction !== 'out' && (
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" title="Unread" />
+                    )}
+                    {email.summary && (
+                      <span className="flex shrink-0 items-center gap-1 text-[11px] text-purple-400">
+                        <Sparkles className="h-3 w-3" />
+                        Summarized
+                      </span>
+                    )}
+                    {email.sent && (
+                      <span className="flex shrink-0 items-center gap-1 text-[11px] text-emerald-500">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Replied
+                      </span>
+                    )}
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${meta?.color ?? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}
+                    >
+                      {meta?.label ?? 'Unclassified'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === 'list' && selectedId != null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-900">
+            <EmailDetailPanel
+              detail={selectedDetail}
+              actionError={actionError}
+              actionLoading={actionLoading}
+              draftText={draftText}
+              setDraftText={setDraftText}
+              composing={composing}
+              instructions={draftInstructions}
+              setInstructions={setDraftInstructions}
+              onClassify={() => runAction('classify', classifyEmail)}
+              onSummarize={() => runAction('summarize', summarizeEmail)}
+              onDraft={() => runAction('draft', (id) => draftEmail(id, draftInstructions))}
+              onReply={() => setComposing(true)}
+              onSend={handleSend}
+              onMark={handleMarkSelected}
+              onRename={handleRenameSelected}
+              onDelete={handleDeleteSelected}
+              onClose={() => setSelectedId(null)}
+            />
           </div>
         </div>
       )}
 
-      {selectedId != null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                {selectedDetail?.subject || 'Loading...'}
-              </p>
-              <button
-                onClick={() => setSelectedId(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {!selectedDetail ? (
-              <p className="p-5 text-sm text-slate-400">Loading...</p>
-            ) : (
-              <div className="space-y-4 p-5">
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                  <span>From: {selectedDetail.sender}</span>
-                  <span>{selectedDetail.received_date}</span>
-                  {selectedDetail.category && (
-                    <span className={`rounded-full px-2 py-0.5 font-medium ${CATEGORY_META[selectedDetail.category]?.color}`}>
-                      {CATEGORY_META[selectedDetail.category]?.label}
-                    </span>
-                  )}
-                </div>
-
-                <div className="max-h-40 overflow-y-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  <pre className="whitespace-pre-wrap font-sans">{selectedDetail.body}</pre>
-                </div>
-
-                {actionError && (
-                  <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-900/40 dark:bg-red-500/10 dark:text-red-400">
-                    {actionError}
-                  </p>
-                )}
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => runAction('classify', classifyEmail)}
-                    disabled={actionLoading != null}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    {actionLoading === 'classify' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                    Classify
-                  </button>
-                  <button
-                    onClick={() => runAction('summarize', summarizeEmail)}
-                    disabled={actionLoading != null}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    {actionLoading === 'summarize' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                    Summarize
-                  </button>
-                  <button
-                    onClick={() => runAction('draft', draftEmail)}
-                    disabled={actionLoading != null}
-                    className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-                  >
-                    {actionLoading === 'draft' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
-                    Draft Reply
-                  </button>
-                </div>
-
-                {selectedDetail.summary && (
-                  <div>
-                    <p className="mb-1.5 text-xs font-semibold uppercase text-slate-400">AI Summary</p>
-                    <div className="rounded-lg border border-purple-100 bg-purple-50/50 p-3 text-xs leading-relaxed text-slate-700 dark:border-purple-500/20 dark:bg-purple-500/5 dark:text-slate-300">
-                      <pre className="whitespace-pre-wrap font-sans">{selectedDetail.summary}</pre>
-                    </div>
-                  </div>
-                )}
-
-                {(selectedDetail.drafted_reply || draftText) && (
-                  <div>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <p className="text-xs font-semibold uppercase text-slate-400">
-                        {selectedDetail.sent ? 'Sent Reply' : 'Draft Reply (edit before sending)'}
-                      </p>
-                      {selectedDetail.sent && (
-                        <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                          <CheckCircle2 className="h-3 w-3" /> Sent
-                        </span>
-                      )}
-                    </div>
-                    <textarea
-                      value={draftText}
-                      onChange={(e) => setDraftText(e.target.value)}
-                      disabled={selectedDetail.sent}
-                      className="h-36 w-full resize-none rounded-lg border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:disabled:bg-slate-800/50"
-                    />
-                    {!selectedDetail.sent && (
-                      <button
-                        onClick={handleSend}
-                        disabled={actionLoading != null || !draftText.trim()}
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                      >
-                        {actionLoading === 'send' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        Send Reply
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+      {lastDeleted && (
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-slate-900 px-4 py-2.5 text-sm text-white shadow-xl dark:bg-slate-800">
+          <span>Email moved to trash.</span>
+          <button
+            onClick={handleUndoDelete}
+            className="flex items-center gap-1.5 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium hover:bg-white/20"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Undo
+          </button>
         </div>
       )}
     </div>

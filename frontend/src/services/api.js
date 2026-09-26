@@ -144,6 +144,14 @@ export function getSystemStatus() {
   return request('/system/status');
 }
 
+export function runVoiceCommand(commandText) {
+  return request('/voice/command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command_text: commandText }),
+  });
+}
+
 export function getEmailAuthStatus() {
   return request('/emails/auth/status');
 }
@@ -152,8 +160,16 @@ export function getEmailAuthUrl() {
   return request('/emails/auth/url');
 }
 
-export function syncEmails() {
-  return request('/emails/sync', { method: 'POST' });
+export function syncEmails(after, before) {
+  const params = new URLSearchParams();
+  if (after) params.set('after', String(after));
+  if (before) params.set('before', String(before));
+  const qs = params.toString();
+  return request(`/emails/sync${qs ? `?${qs}` : ''}`, { method: 'POST' });
+}
+
+export function getEmailAccount() {
+  return request('/emails/account');
 }
 
 export function listEmails() {
@@ -172,8 +188,9 @@ export function summarizeEmail(id) {
   return request(`/emails/${id}/summarize`, { method: 'POST' });
 }
 
-export function draftEmail(id) {
-  return request(`/emails/${id}/draft`, { method: 'POST' });
+export function draftEmail(id, instructions) {
+  const qs = instructions ? `?instructions=${encodeURIComponent(instructions)}` : '';
+  return request(`/emails/${id}/draft${qs}`, { method: 'POST' });
 }
 
 export function sendEmail(id, body) {
@@ -182,4 +199,47 @@ export function sendEmail(id, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ body }),
   });
+}
+
+export function markEmailRead(id, read) {
+  return request(`/emails/${id}/mark`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ read }),
+  });
+}
+
+export function deleteEmail(id) {
+  return request(`/emails/${id}`, { method: 'DELETE' });
+}
+
+export function restoreEmail(email) {
+  return request('/emails/restore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function saveEmailPosition(id, x, y) {
+  return request(`/emails/${id}/position`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ x, y }),
+  });
+}
+
+export function nameSender(id, name) {
+  return request(`/emails/${id}/name-sender`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function attachmentUrl(emailId, attachmentId) {
+  // Plain <a href> download links can't carry an Authorization header, so
+  // the token rides in the query string - same fallback as documentImageUrl.
+  const token = getToken();
+  return `${BASE}/emails/${emailId}/attachments/${attachmentId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 }
