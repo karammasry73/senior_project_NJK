@@ -1,6 +1,3 @@
-# make-sense.ai annotation tool - cloned separately, not project source
-/tools/
-
 # Python
 backend/.venv/
 **/__pycache__/

@@ -32,6 +32,22 @@ class DetectPreviewResponse(BaseModel):
     image_height: int
 
 
+class FlushResponse(BaseModel):
+    deleted: int
+
+
+class StatsResponse(BaseModel):
+    documents: int
+    invoices: int
+    emails: int
+    users: int
+    db_size_bytes: int
+    uploads_size_bytes: int
+    ollama_model: str
+    ollama_host: str
+    paddleocr_lang: str
+
+
 class InvoiceOut(BaseModel):
     id: int
     document_id: int
@@ -50,6 +66,13 @@ class InvoiceFlagRequest(BaseModel):
     confirmed: bool
 
 
+class AttachmentOut(BaseModel):
+    id: str
+    filename: str | None = None
+    mime_type: str | None = None
+    size: int = 0
+
+
 class EmailOut(BaseModel):
     id: int
     subject: str | None = None
@@ -61,11 +84,18 @@ class EmailOut(BaseModel):
     drafted_reply: str | None = None
     sent: bool = False
     processed_date: str
+    thread_id: str | None = None
+    direction: str = "in"
+    is_read: bool = True
+    pos_x: float | None = None
+    pos_y: float | None = None
+    gmail_category: str | None = None
+    custom_name: str | None = None
+    attachments: list[AttachmentOut] = []
 
 
 class EmailDetail(EmailOut):
     body: str | None = None
-    thread_id: str | None = None
 
 
 class EmailAuthStatus(BaseModel):
@@ -79,6 +109,23 @@ class EmailAuthUrl(BaseModel):
 
 class SendReplyRequest(BaseModel):
     body: str
+
+
+class MarkReadRequest(BaseModel):
+    read: bool
+
+
+class PositionRequest(BaseModel):
+    x: float
+    y: float
+
+
+class NameSenderRequest(BaseModel):
+    name: str
+
+
+class RestoreEmailRequest(BaseModel):
+    email: dict[str, Any]
 
 
 class DocumentSummarizeRequest(BaseModel):
@@ -96,6 +143,14 @@ class VoiceCommandRequest(BaseModel):
 class VoiceCommandResponse(BaseModel):
     action_taken: str
     result: dict[str, Any] | None = None
+
+
+class ChatMessageRequest(BaseModel):
+    message: str
+
+
+class ChatMessageResponse(BaseModel):
+    reply: str
 
 
 class ServiceStatus(BaseModel):

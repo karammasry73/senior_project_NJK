@@ -6,9 +6,3 @@ data/uploads/
 models/*.pt
 *.pt
 .env
-
-# training data is large binary content, not source - don't commit it
-data/raw/*
-!data/raw/exams/.gitkeep
-data/datasets/*/images/
-data/datasets/*/labels/

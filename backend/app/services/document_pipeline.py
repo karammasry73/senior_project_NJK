@@ -12,6 +12,7 @@ tied to a real detected box, not guessed. Whole-page regex
 were detected (e.g. stock/non-invoice-tuned weights).
 """
 
+import asyncio
 import re
 import tempfile
 from pathlib import Path
@@ -152,16 +153,19 @@ async def process_document(file_path: str, file_type: str, domain: str = "exams"
     """
     image_path = render_to_image(file_path, file_type)
 
+    # YOLO/PaddleOCR are synchronous, CPU-bound (no GPU on this machine) and can each take
+    # real seconds - run them off the event loop so this request (a background task, but
+    # still on the same loop as everything else) doesn't stall the whole server meanwhile.
     try:
-        regions = yolo_detector.detect_regions(image_path, domain=domain)
+        regions = await asyncio.to_thread(yolo_detector.detect_regions, image_path, domain=domain)
     except Exception as exc:  # noqa: BLE001 - detection failures shouldn't block OCR
         regions = []
         regions_error = str(exc)
     else:
         regions_error = None
 
-    ocr_result = ocr_processor.extract_text(image_path)
-    regions_text = _crop_and_ocr_regions(image_path, regions) if regions else {}
+    ocr_result = await asyncio.to_thread(ocr_processor.extract_text, image_path)
+    regions_text = await asyncio.to_thread(_crop_and_ocr_regions, image_path, regions) if regions else {}
 
     if domain == "invoices" and regions_text:
         fields = _extract_invoice_fields_from_regions(regions_text)

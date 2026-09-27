@@ -21,7 +21,7 @@ import { drawRegions } from './regionOverlay';
 const ACCEPTED_TYPES = ['pdf', 'png', 'jpg', 'jpeg'];
 
 const STATUS_META = {
-  pending: { label: 'Pending', color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300', icon: Clock },
+  pending: { label: 'Pending', color: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300', icon: Clock },
   processing: { label: 'Processing', color: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300', icon: Loader2 },
   processed: { label: 'Processed', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300', icon: CheckCircle2 },
   failed: { label: 'Failed', color: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300', icon: AlertTriangle },
@@ -32,7 +32,7 @@ const STATUS_FILTERS = ['All', 'Pending', 'Processing', 'Processed', 'Failed'];
 function fileIcon(fileType) {
   if (fileType === 'pdf') return { Icon: FileText, color: 'bg-rose-50 text-rose-500 dark:bg-rose-500/10 dark:text-rose-300' };
   if (['png', 'jpg', 'jpeg'].includes(fileType)) return { Icon: FileImage, color: 'bg-amber-50 text-amber-500 dark:bg-amber-500/10 dark:text-amber-300' };
-  return { Icon: File, color: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' };
+  return { Icon: File, color: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' };
 }
 
 export default function Documents() {
@@ -46,6 +46,7 @@ export default function Documents() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [selectedId, setSelectedId] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [textMode, setTextMode] = useState('boxes'); // 'boxes' (per-region OCR) | 'all' (whole-page OCR)
   const fileInputRef = useRef(null);
   const detailImgRef = useRef(null);
   const detailOverlayRef = useRef(null);
@@ -72,6 +73,7 @@ export default function Documents() {
   }, [documents, refresh]);
 
   useEffect(() => {
+    setTextMode('boxes');
     if (selectedId == null) {
       setSelectedDetail(null);
       return;
@@ -155,8 +157,8 @@ export default function Documents() {
         <div
           className={`col-span-2 rounded-xl border-2 border-dashed p-5 text-center transition-colors ${
             isDragging
-              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10'
-              : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
+              ? 'border-amber-500 bg-amber-50 dark:bg-amber-500/10'
+              : 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
           }`}
           onDragOver={(e) => {
             e.preventDefault();
@@ -170,12 +172,12 @@ export default function Documents() {
           }}
         >
           <UploadCloud
-            className={`mx-auto h-8 w-8 ${isDragging ? 'text-indigo-500' : 'text-slate-400 dark:text-slate-500'}`}
+            className={`mx-auto h-8 w-8 ${isDragging ? 'text-amber-600 dark:text-amber-500' : 'text-zinc-400 dark:text-zinc-500'}`}
           />
-          <p className="mt-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+          <p className="mt-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
             {isDragging ? 'Drop files to upload' : 'Upload Documents'}
           </p>
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">PDF, JPG, PNG</p>
+          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">PDF, JPG, PNG</p>
           <input
             ref={fileInputRef}
             type="file"
@@ -191,33 +193,33 @@ export default function Documents() {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="rounded-lg bg-indigo-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50"
             >
               Browse Files
             </button>
             <button
               onClick={() => setShowCamera(true)}
               disabled={uploading}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-4 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               <Camera className="h-3.5 w-3.5" />
               Use Camera
             </button>
           </div>
           {uploading && (
-            <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-indigo-500">
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-amber-600 dark:text-amber-500">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...
             </p>
           )}
           {uploadError && <p className="mt-2 text-xs text-red-500">{uploadError}</p>}
         </div>
 
-        <div className="col-span-2 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 p-5 text-white shadow-sm">
+        <div className="col-span-2 rounded-xl bg-zinc-900 p-5 text-white shadow-sm">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-indigo-200">Active Pipeline</p>
+              <p className="text-sm font-medium text-zinc-300">Active Pipeline</p>
               <p className="mt-1 text-2xl font-bold">{activeCount} document{activeCount === 1 ? '' : 's'} processing</p>
-              <div className="mt-3 flex items-center gap-4 text-sm text-indigo-100">
+              <div className="mt-3 flex items-center gap-4 text-sm text-zinc-300">
                 <span className="flex items-center gap-1.5">
                   <FileImage className="h-4 w-4" />
                   YOLO: Layout Analysis
@@ -233,8 +235,8 @@ export default function Documents() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-100 p-4 dark:border-slate-800">
+      <div className="rounded-xl border border-zinc-200 bg-white shadow-sm transition-colors dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex items-center justify-between border-b border-zinc-100 p-4 dark:border-zinc-800">
           <div className="flex gap-2">
             {STATUS_FILTERS.map((filter) => (
               <button
@@ -242,8 +244,8 @@ export default function Documents() {
                 onClick={() => setStatusFilter(filter)}
                 className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
                   statusFilter === filter
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                    ? 'bg-zinc-900 text-white'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
                 }`}
               >
                 {filter}
@@ -252,14 +254,14 @@ export default function Documents() {
           </div>
         </div>
 
-        <div className="relative border-b border-slate-100 p-4 dark:border-slate-800">
-          <Search className="pointer-events-none absolute left-7 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <div className="relative border-b border-zinc-100 p-4 dark:border-zinc-800">
+          <Search className="pointer-events-none absolute left-7 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search documents..."
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-800"
+            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pl-10 pr-3 text-sm text-zinc-700 placeholder:text-zinc-400 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:bg-zinc-800"
           />
         </div>
 
@@ -269,9 +271,9 @@ export default function Documents() {
           </div>
         )}
 
-        <div className="divide-y divide-slate-50 dark:divide-slate-800/60">
+        <div className="divide-y divide-zinc-50 dark:divide-zinc-800/60">
           {filtered.length === 0 && !loadError && (
-            <p className="px-5 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+            <p className="px-5 py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">
               No documents yet. Upload a file or use the camera to get started.
             </p>
           )}
@@ -283,22 +285,22 @@ export default function Documents() {
             return (
               <div
                 key={doc.id}
-                className="flex cursor-pointer items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                className="flex cursor-pointer items-center gap-4 px-5 py-3.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
                 onClick={() => setSelectedId(doc.id)}
               >
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${color}`}>
                   <Icon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">{doc.filename}</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                  <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">{doc.filename}</p>
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
                     {doc.file_type.toUpperCase()} • {doc.upload_date}
                   </p>
                 </div>
                 <div className="w-32">
                   {confidencePct != null ? (
                     <div className="flex items-center gap-2">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                         <div
                           className={`h-full rounded-full ${
                             confidencePct >= 90 ? 'bg-emerald-500' : confidencePct >= 75 ? 'bg-amber-500' : 'bg-red-500'
@@ -306,10 +308,10 @@ export default function Documents() {
                           style={{ width: `${confidencePct}%` }}
                         />
                       </div>
-                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{confidencePct}%</span>
+                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{confidencePct}%</span>
                     </div>
                   ) : (
-                    <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
+                    <span className="text-xs text-zinc-400 dark:text-zinc-500">—</span>
                   )}
                 </div>
                 <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${meta.color}`}>
@@ -319,13 +321,13 @@ export default function Documents() {
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => setSelectedId(doc.id)}
-                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                    className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
                   >
                     <Eye className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => handleDelete(doc.id)}
-                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:text-slate-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                    className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:text-zinc-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -342,24 +344,24 @@ export default function Documents() {
 
       {selectedId != null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-zinc-900">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
+              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
                 {selectedDetail?.filename ?? 'Loading...'}
               </p>
               <button
                 onClick={() => setSelectedId(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="space-y-4 p-5">
               {!selectedDetail ? (
-                <p className="text-sm text-slate-400">Loading...</p>
+                <p className="text-sm text-zinc-400">Loading...</p>
               ) : (
                 <>
-                  <div className="flex flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400">
+                  <div className="flex flex-wrap gap-4 text-xs text-zinc-500 dark:text-zinc-400">
                     <span>Status: {STATUS_META[selectedDetail.status]?.label ?? selectedDetail.status}</span>
                     {selectedDetail.confidence != null && (
                       <span>Confidence: {Math.round(selectedDetail.confidence * 100)}%</span>
@@ -369,8 +371,8 @@ export default function Documents() {
 
                   {selectedDetail.status === 'processed' && (
                     <div>
-                      <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Detected Regions</p>
-                      <div className="relative overflow-hidden rounded-lg border border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800">
+                      <p className="mb-2 text-xs font-semibold uppercase text-zinc-400">Detected Regions</p>
+                      <div className="relative overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800">
                         <img
                           ref={detailImgRef}
                           src={documentImageUrl(selectedDetail.id)}
@@ -389,45 +391,72 @@ export default function Documents() {
                     </div>
                   )}
 
-                  {selectedDetail.structured_json?.regions_text &&
-                    Object.keys(selectedDetail.structured_json.regions_text).length > 0 && (
-                      <div>
-                        <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Text by Region</p>
-                        <div className="space-y-2 rounded-lg border border-slate-100 p-3 text-sm dark:border-slate-800">
-                          {Object.entries(selectedDetail.structured_json.regions_text).map(([label, texts]) => (
-                            <div key={label}>
-                              <p className="text-xs font-medium text-indigo-500">{label}</p>
-                              {texts.map((t, i) => (
-                                <p key={i} className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">
-                                  {t}
-                                </p>
-                              ))}
-                            </div>
-                          ))}
+                  {(selectedDetail.raw_text || selectedDetail.structured_json?.regions_text) && (
+                    <div>
+                      <div className="mb-2 flex items-center justify-between">
+                        <p className="text-xs font-semibold uppercase text-zinc-400">Extracted Text</p>
+                        <div className="flex rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-700">
+                          <button
+                            onClick={() => setTextMode('boxes')}
+                            className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                              textMode === 'boxes'
+                                ? 'bg-zinc-900 text-white'
+                                : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+                            }`}
+                          >
+                            Boxes Only
+                          </button>
+                          <button
+                            onClick={() => setTextMode('all')}
+                            className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                              textMode === 'all'
+                                ? 'bg-zinc-900 text-white'
+                                : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+                            }`}
+                          >
+                            All Text
+                          </button>
                         </div>
                       </div>
-                    )}
 
-                  {selectedDetail.structured_json?.fields && (
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Extracted Fields</p>
-                      <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 p-3 text-sm dark:border-slate-800">
-                        {Object.entries(selectedDetail.structured_json.fields).map(([key, value]) => (
-                          <div key={key}>
-                            <p className="text-xs text-slate-400">{key}</p>
-                            <p className="text-slate-700 dark:text-slate-200">{value ?? '—'}</p>
+                      {textMode === 'boxes' ? (
+                        Object.keys(selectedDetail.structured_json?.regions_text || {}).length > 0 ? (
+                          <div className="space-y-2 rounded-lg border border-zinc-100 p-3 text-sm dark:border-zinc-800">
+                            {Object.entries(selectedDetail.structured_json.regions_text).map(([label, texts]) => (
+                              <div key={label}>
+                                <p className="text-xs font-medium text-amber-600 dark:text-amber-500">{label}</p>
+                                {texts.map((t, i) => (
+                                  <p key={i} className="whitespace-pre-wrap text-zinc-700 dark:text-zinc-200">
+                                    {t}
+                                  </p>
+                                ))}
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        ) : (
+                          <p className="rounded-lg border border-zinc-100 p-3 text-sm text-zinc-400 dark:border-zinc-800">
+                            No detected boxes had readable text.
+                          </p>
+                        )
+                      ) : (
+                        <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                          {selectedDetail.raw_text || '(no text extracted)'}
+                        </pre>
+                      )}
                     </div>
                   )}
 
-                  {selectedDetail.raw_text && (
+                  {selectedDetail.structured_json?.fields && (
                     <div>
-                      <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Raw OCR Text</p>
-                      <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        {selectedDetail.raw_text}
-                      </pre>
+                      <p className="mb-2 text-xs font-semibold uppercase text-zinc-400">Extracted Fields</p>
+                      <div className="grid grid-cols-2 gap-2 rounded-lg border border-zinc-100 p-3 text-sm dark:border-zinc-800">
+                        {Object.entries(selectedDetail.structured_json.fields).map(([key, value]) => (
+                          <div key={key}>
+                            <p className="text-xs text-zinc-400">{key}</p>
+                            <p className="text-zinc-700 dark:text-zinc-200">{value ?? '—'}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -435,7 +464,7 @@ export default function Documents() {
                     <p className="text-sm text-red-500">{selectedDetail.raw_text}</p>
                   )}
                   {(selectedDetail.status === 'pending' || selectedDetail.status === 'processing') && (
-                    <p className="flex items-center gap-2 text-sm text-slate-400">
+                    <p className="flex items-center gap-2 text-sm text-zinc-400">
                       <Loader2 className="h-4 w-4 animate-spin" /> Still processing...
                     </p>
                   )}

@@ -49,7 +49,7 @@ export default function App() {
   }
 
   if (checkingSession) {
-    return <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950" />;
+    return <div className="flex h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950" />;
   }
 
   if (!user) {
@@ -58,19 +58,19 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="flex h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
+      <div className="flex h-screen bg-zinc-50 text-zinc-900 transition-colors dark:bg-zinc-950 dark:text-zinc-100">
         <Sidebar user={user} onLogout={handleLogout} />
         <div className="flex flex-1 flex-col overflow-hidden">
           <Topbar dark={dark} onToggleTheme={() => setDark((d) => !d)} />
           <main className="flex-1 overflow-y-auto">
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard user={user} />} />
               <Route path="/documents" element={<Documents />} />
               <Route path="/invoices" element={<Invoices />} />
               <Route path="/emails" element={<Emails />} />
               <Route path="/voice" element={<Voice />} />
-              <Route path="/settings" element={<Settings />} />
+              <Route path="/settings" element={<Settings user={user} />} />
               <Route
                 path="/users"
                 element={user.role === 'admin' ? <UserManagement currentUser={user} /> : <Navigate to="/dashboard" replace />}

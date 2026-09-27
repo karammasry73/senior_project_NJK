@@ -37,6 +37,8 @@ async def summarize(subject: str, body: str) -> str:
     return (await ollama_client.generate(prompt, system=_SUMMARIZE_SYSTEM)).strip()
 
 
-async def draft_reply(subject: str, body: str, sender: str) -> str:
+async def draft_reply(subject: str, body: str, sender: str, instructions: str | None = None) -> str:
     prompt = f"From: {sender}\nSubject: {subject}\n\n{body}"
+    if instructions:
+        prompt += f"\n\nAdditional instructions for this reply: {instructions}"
     return (await ollama_client.generate(prompt, system=_DRAFT_SYSTEM)).strip()

@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Mic,
-  MicOff,
   Bot,
   Send,
   Sparkles,
@@ -9,344 +8,263 @@ import {
   Receipt,
   Mail,
   ClipboardList,
-  Square,
-  Volume2,
-  History,
-  Settings2,
+  Loader2,
+  MicOff,
+  Eraser,
 } from 'lucide-react';
+import { chatWithAssistant, getStats, getSystemStatus } from '../../services/api';
 
-const suggestedCommands = [
-  { label: 'Process the latest invoice', icon: Receipt },
-  { label: 'Summarize document', icon: FileText },
-  { label: 'Draft a reply to Sarah', icon: Mail },
-  { label: 'List unread emails', icon: ClipboardList },
+const suggestedPrompts = [
+  { label: 'How many documents are pending?', icon: FileText },
+  { label: 'Any invoices need review?', icon: Receipt },
+  { label: 'Do I have unread emails?', icon: Mail },
+  { label: "What's my current system status?", icon: ClipboardList },
 ];
 
-const chatHistory = [
-  {
-    type: 'user',
-    text: 'Process the latest invoice from Acme',
-    time: '10:42 AM',
-  },
-  {
+const STORAGE_KEY = 'sme-ai-assistant-chat';
+
+function timeNow() {
+  return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function greeting() {
+  return {
     type: 'assistant',
-    text: 'Processing invoice_acme_corp_march.pdf — YOLO detected 4 regions (header, vendor info, line items, total). PaddleOCR extracted 128 text blocks. Ollama structured 12 fields. Total detected: $1,284.50 with 98% confidence.',
-    time: '10:42 AM',
-    response: {
-      confidence: 98,
-      fields: 12,
-      regions: 4,
-      status: 'Processed',
-    },
-  },
-  {
-    type: 'user',
-    text: 'Summarize the supplier contract',
-    time: '10:38 AM',
-  },
-  {
-    type: 'assistant',
-    text: 'Summarized supplier_contract_v2.pdf: A 24-month supply agreement with LogisticsPro covering monthly shipping services at $567.80/month. Auto-renewal clause present. Key terms include 30-day termination notice and volume discount at 5%+.',
-    time: '10:38 AM',
-  },
-];
+    text: "Hi, I'm your AI Assistant. Ask me about your documents, invoices, or emails - I can see real counts from the system. Voice input isn't wired up yet, so type your question below.",
+    time: timeNow(),
+  };
+}
 
-const commandPalette = [
-  { command: 'process invoice', module: 'Website invoice' },
-  { command: 'draft email', module: 'Email manager' },
-  { command: 'summarize document', module: 'Document processing' },
-  { command: 'categorize emails', module: 'Email manager' },
-  { command: 'status report', module: 'Dashboard' },
-  { command: 'open settings', module: 'Settings' },
-];
+function loadMessages() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // localStorage unavailable (private mode, etc.) or corrupt JSON - fall through to a fresh greeting
+  }
+  return [greeting()];
+}
 
 export default function Voice() {
-  const [isListening, setIsListening] = useState(false);
-  const [currentTranscript, setCurrentTranscript] = useState('');
-  const [messages, setMessages] = useState(chatHistory);
-  const [activeCommand, setActiveCommand] = useState(null);
-
-  const waveRef = useRef(null);
+  // Lazy-initialized from localStorage, not a fresh greeting every time - this is what
+  // makes the conversation survive navigating away to another page and back, since this
+  // component fully unmounts/remounts on route change (its own state alone can't persist that).
+  const [messages, setMessages] = useState(loadMessages);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [ollamaAvailable, setOllamaAvailable] = useState(null);
+  const [modelName, setModelName] = useState(null);
+  const scrollRef = useRef(null);
 
   useEffect(() => {
-    if (!waveRef.current) return;
-    const bars = waveRef.current.children;
-    const interval = setInterval(() => {
-      for (let i = 0; i < bars.length; i++) {
-        const amplitude = isListening ? 0.5 + Math.random() * 0.5 : 0.12;
-        bars[i].style.height = `${amplitude * 100}%`;
-      }
-    }, 120);
-    return () => clearInterval(interval);
-  }, [isListening]);
+    getSystemStatus()
+      .then((s) => setOllamaAvailable(s.ollama.available))
+      .catch(() => setOllamaAvailable(false));
+    getStats()
+      .then((s) => setModelName(s.ollama_model))
+      .catch(() => {});
+  }, []);
 
-  const handleMicToggle = () => {
-    if (isListening) {
-      setIsListening(false);
-      if (currentTranscript) {
-        const newMsg = {
-          type: 'user',
-          text: currentTranscript,
-          time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-        };
-        setMessages((prev) => [...prev, newMsg]);
-        setCurrentTranscript('');
-      }
-    } else {
-      setIsListening(true);
-      setTimeout(() => {
-        if (isListening) {
-          setCurrentTranscript("Hmm, I didn't catch that. Try speaking again...");
-        }
-      }, 3000);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      // private-browsing / storage-full - conversation just won't persist this time
     }
-  };
+  }, [messages]);
 
-  const handleCommandClick = (label) => {
-    setMessages((prev) => [
-      ...prev,
-      { type: 'user', text: label, time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) },
-    ]);
-    setActiveCommand(label);
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: 'assistant',
-          text: `Great! I'm ${
-            label.toLowerCase().includes('process')
-              ? 'processing the invoice now — YOLO layout analysis complete, PaddleOCR extraction in progress, Ollama structuring the data...'
-              : label.toLowerCase().includes('summar')
-                ? 'summarizing the document — extracting key sections, generating concise summary via Ollama...'
-                : label.toLowerCase().includes('draft')
-                  ? 'drafting a professional response based on context from the email thread...'
-                  : 'fetching your inbox and categorizing emails with Ollama...'
-          }`,
-          time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-        },
-      ]);
-      setActiveCommand(null);
-    }, 1800);
-  };
+  function handleClear() {
+    const fresh = [greeting()];
+    setMessages(fresh);
+    setError(null);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+    } catch {
+      // ignore - same as above
+    }
+  }
+
+  async function sendMessage(text) {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+    setMessages((prev) => [...prev, { type: 'user', text: trimmed, time: timeNow() }]);
+    setInput('');
+    setSending(true);
+    setError(null);
+    try {
+      const { reply } = await chatWithAssistant(trimmed);
+      setMessages((prev) => [...prev, { type: 'assistant', text: reply, time: timeNow() }]);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    sendMessage(input);
+  }
 
   return (
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Voice Assistant
-          </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Powered by VoxType — hands-free control for your automation workflows
+          <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">AI Assistant</h3>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Ask questions about your documents, invoices, and emails - answered from real system data via Ollama
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-            <Volume2 className="h-3.5 w-3.5" />
-            VoxType Ready
-          </span>
-        </div>
+        <span
+          className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
+            ollamaAvailable
+              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+              : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+          }`}
+        >
+          <Bot className="h-3.5 w-3.5" />
+          {ollamaAvailable == null ? 'Checking Ollama...' : ollamaAvailable ? 'Ollama Active' : 'Ollama Unavailable'}
+        </span>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+        <div className="col-span-2 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-colors dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-600 to-purple-600">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900">
                 <Bot className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Assistant
-                </h4>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                  llama3.1:8b via Ollama · offline
+                <h4 className="text-sm font-semibold text-zinc-900 dark:text-white">Assistant</h4>
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                  {modelName || '...'} via Ollama · offline
                 </p>
               </div>
             </div>
-            <span className={`flex items-center gap-1.5 text-xs font-medium ${isListening ? 'text-red-500' : 'text-slate-400 dark:text-slate-500'}`}>
-              <span className="relative flex h-2 w-2">
-                <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${isListening ? 'bg-red-400' : 'bg-slate-300 dark:bg-slate-600'}`} />
-                <span className={`relative inline-flex h-2 w-2 rounded-full ${isListening ? 'bg-red-500' : 'bg-slate-400 dark:bg-slate-500'}`} />
-              </span>
-              {isListening ? 'Listening...' : 'Ready'}
-            </span>
+            <button
+              onClick={handleClear}
+              title="Clear conversation"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+            >
+              <Eraser className="h-3.5 w-3.5" />
+              Clear
+            </button>
           </div>
 
-          <div className="h-96 overflow-y-auto p-5">
+          <div ref={scrollRef} className="h-96 overflow-y-auto p-5">
             <div className="space-y-4">
               {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
+                <div key={i} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
                       msg.type === 'user'
-                        ? 'rounded-br-md bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
-                        : 'rounded-bl-md border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800'
+                        ? 'rounded-br-md bg-amber-600 text-white'
+                        : 'rounded-bl-md border border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800'
                     }`}
                   >
                     <p
                       className={`whitespace-pre-line text-sm leading-relaxed ${
-                        msg.type === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'
+                        msg.type === 'user' ? 'text-white' : 'text-zinc-700 dark:text-zinc-200'
                       }`}
                     >
                       {msg.text}
                     </p>
-                    {msg.response && (
-                      <div className={`mt-3 grid grid-cols-4 gap-2 ${msg.type === 'user' ? 'text-white' : ''}`}>
-                        <div className={`rounded-lg p-2 text-center ${msg.type === 'user' ? 'bg-white/20' : 'bg-white dark:bg-slate-900'}`}>
-                          <p className="text-lg font-bold">{msg.response.regions}</p>
-                          <p className="text-[10px] opacity-80">YOLO Regions</p>
-                        </div>
-                        <div className={`rounded-lg p-2 text-center ${msg.type === 'user' ? 'bg-white/20' : 'bg-white dark:bg-slate-900'}`}>
-                          <p className="text-lg font-bold">{msg.response.fields}</p>
-                          <p className="text-[10px] opacity-80">Fields Extracted</p>
-                        </div>
-                        <div className={`rounded-lg p-2 text-center ${msg.type === 'user' ? 'bg-white/20' : 'bg-white dark:bg-slate-900'}`}>
-                          <p className="text-lg font-bold">{msg.response.confidence}%</p>
-                          <p className="text-[10px] opacity-80">Confidence</p>
-                        </div>
-                        <div className={`rounded-lg p-2 text-center ${msg.type === 'user' ? 'bg-white/20' : 'bg-white dark:bg-slate-900'}`}>
-                          <p className="text-lg font-bold">✓</p>
-                          <p className="text-[10px] opacity-80">{msg.response.status}</p>
-                        </div>
-                      </div>
-                    )}
-                    <p
-                      className={`mt-1.5 text-[10px] ${
-                        msg.type === 'user' ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'
-                      }`}
-                    >
+                    <p className={`mt-1.5 text-[10px] ${msg.type === 'user' ? 'text-amber-100' : 'text-zinc-400 dark:text-zinc-500'}`}>
                       {msg.time}
                     </p>
                   </div>
                 </div>
               ))}
+              {sending && (
+                <div className="flex justify-start">
+                  <div className="rounded-2xl rounded-bl-md border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800">
+                    <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="border-t border-slate-100 p-4 dark:border-slate-800">
+          {error && (
+            <p className="border-t border-red-100 bg-red-50 px-5 py-2 text-xs text-red-600 dark:border-red-900/40 dark:bg-red-500/10 dark:text-red-400">
+              {error}
+            </p>
+          )}
+
+          <form onSubmit={handleSubmit} className="border-t border-zinc-100 p-4 dark:border-zinc-800">
             <div className="flex items-center gap-3">
-              <div className="flex flex-1 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+              <div className="flex flex-1 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800">
                 <input
                   type="text"
-                  value={currentTranscript}
-                  onChange={(e) => setCurrentTranscript(e.target.value)}
-                  placeholder={
-                    isListening
-                      ? 'Listening... speak now'
-                      : 'Type a command or press the mic...'
-                  }
-                  className="flex-1 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder:text-slate-500"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask about your documents, invoices, or emails..."
+                  disabled={sending}
+                  className="flex-1 bg-transparent text-sm text-zinc-700 placeholder:text-zinc-400 focus:outline-none disabled:opacity-50 dark:text-zinc-200 dark:placeholder:text-zinc-500"
                 />
-                {isListening && (
-                  <span className="animate-pulse text-xs font-medium text-red-500">
-                    ● LIVE
-                  </span>
-                )}
               </div>
 
               <button
-                onClick={handleMicToggle}
-                className={`flex h-11 w-11 items-center justify-center rounded-full transition-all ${
-                  isListening
-                    ? 'bg-red-500 text-white shadow-lg shadow-red-200 dark:shadow-none'
-                    : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md hover:opacity-90'
-                }`}
+                type="button"
+                disabled
+                title="Voice input isn't wired up yet - type your question instead"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
               >
-                {isListening ? (
-                  <Square className="h-5 w-5 fill-current" />
-                ) : (
-                  <Mic className="h-5 w-5" />
-                )}
+                <MicOff className="h-5 w-5" />
               </button>
 
-              <button className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md transition-opacity hover:opacity-90">
-                <Send className="h-5 w-5" />
+              <button
+                type="submit"
+                disabled={sending || !input.trim()}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white shadow-md transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
               </button>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 border-t border-slate-100 px-5 py-3 dark:border-slate-800">
-            <History className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              Recent threads appear here. Commands execute via API route.
-            </p>
-          </div>
+          </form>
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-indigo-500" />
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Quick Commands
-                </h4>
-              </div>
-              <Settings2 className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm transition-colors dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mb-4 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-500" />
+              <h4 className="text-sm font-semibold text-zinc-900 dark:text-white">Try Asking</h4>
             </div>
             <div className="space-y-2">
-              {suggestedCommands.map((cmd, i) => {
+              {suggestedPrompts.map((cmd, i) => {
                 const Icon = cmd.icon;
                 return (
                   <button
                     key={i}
-                    onClick={() => handleCommandClick(cmd.label)}
-                    disabled={activeCommand !== null}
-                    className="flex w-full items-center gap-3 rounded-lg border border-slate-100 p-3 text-left transition-colors hover:border-indigo-200 hover:bg-indigo-50 disabled:opacity-50 dark:border-slate-800 dark:hover:border-indigo-500/30 dark:hover:bg-indigo-500/10"
+                    onClick={() => sendMessage(cmd.label)}
+                    disabled={sending}
+                    className="flex w-full items-center gap-3 rounded-lg border border-zinc-100 p-3 text-left transition-colors hover:border-amber-300 hover:bg-amber-50 disabled:opacity-50 dark:border-zinc-800 dark:hover:border-amber-500/30 dark:hover:bg-amber-500/10"
                   >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
-                      <Icon className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
+                      <Icon className="h-4 w-4 text-zinc-600 dark:text-zinc-300" />
                     </div>
-                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                      {cmd.label}
-                    </span>
+                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{cmd.label}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
-            <h4 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">
-              Command Palette
-            </h4>
-            <div className="space-y-1.5">
-              {commandPalette.map((cmd) => (
-                <div
-                  key={cmd.command}
-                  className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800"
-                >
-                  <div className="flex items-center gap-2">
-                    <Bot className="h-3.5 w-3.5 text-indigo-400" />
-                    <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
-                      "{cmd.command}"
-                    </span>
-                  </div>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:bg-slate-900 dark:text-slate-500">
-                    {cmd.module}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <p className="mt-3 text-[11px] text-slate-400 dark:text-slate-500">
-              Trigger these commands hands-free with "Hey Assistant" wake word.
-            </p>
-          </div>
-
-          <div className="rounded-xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white dark:from-slate-800 dark:to-slate-700">
+          <div className="rounded-xl bg-gradient-to-br from-zinc-900 to-zinc-800 p-5 text-white dark:from-zinc-800 dark:to-zinc-700">
             <h4 className="text-sm font-semibold">Privacy First</h4>
-            <p className="mt-2 text-xs leading-relaxed text-slate-300 dark:text-slate-200">
-              All voice processing runs locally through VoxType. Audio never
-              leaves your machine — ideal for handling sensitive business data.
+            <p className="mt-2 text-xs leading-relaxed text-zinc-300 dark:text-zinc-200">
+              Every reply is generated locally through Ollama - your questions and the system
+              data used to answer them never leave this machine.
             </p>
             <div className="mt-4 flex items-center gap-2">
-              <MicOff className="h-4 w-4 text-emerald-400" />
-              <span className="text-xs font-medium text-emerald-300">
-                No cloud audio processing
+              <Mic className="h-4 w-4 text-amber-400" />
+              <span className="text-xs font-medium text-amber-300">
+                Voice input (mic → VoxType) is on the roadmap, not active yet
               </span>
             </div>
           </div>

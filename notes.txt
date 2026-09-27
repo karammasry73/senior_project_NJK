@@ -1,0 +1,11 @@
+filtering button 
+
+voice assitant 
+
+prompt in general working 
+
+database flushing 
+
+setting page working 
+
+dashboard working

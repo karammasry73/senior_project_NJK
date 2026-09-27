@@ -36,6 +36,7 @@ export default function Invoices() {
   const [selectedId, setSelectedId] = useState(null);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [flagging, setFlagging] = useState(false);
+  const [textMode, setTextMode] = useState('boxes'); // 'boxes' (per-region OCR) | 'all' (whole-page OCR)
   const fileInputRef = useRef(null);
   const detailImgRef = useRef(null);
   const detailOverlayRef = useRef(null);
@@ -57,6 +58,7 @@ export default function Invoices() {
   const selectedInvoice = invoices.find((inv) => inv.id === selectedId) ?? null;
 
   useEffect(() => {
+    setTextMode('boxes');
     if (!selectedInvoice) {
       setSelectedDocument(null);
       return;
@@ -145,8 +147,8 @@ export default function Invoices() {
         <div
           className={`col-span-2 rounded-xl border-2 border-dashed p-5 text-center transition-colors ${
             isDragging
-              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10'
-              : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
+              ? 'border-amber-500 bg-amber-50 dark:bg-amber-500/10'
+              : 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
           }`}
           onDragOver={(e) => {
             e.preventDefault();
@@ -160,12 +162,12 @@ export default function Invoices() {
           }}
         >
           <UploadCloud
-            className={`mx-auto h-8 w-8 ${isDragging ? 'text-indigo-500' : 'text-slate-400 dark:text-slate-500'}`}
+            className={`mx-auto h-8 w-8 ${isDragging ? 'text-amber-600 dark:text-amber-500' : 'text-zinc-400 dark:text-zinc-500'}`}
           />
-          <p className="mt-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+          <p className="mt-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
             {isDragging ? 'Drop invoice to process' : 'Upload Invoice'}
           </p>
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">PDF, JPG, PNG</p>
+          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">PDF, JPG, PNG</p>
           <input
             ref={fileInputRef}
             type="file"
@@ -181,35 +183,35 @@ export default function Invoices() {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="rounded-lg bg-indigo-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50"
             >
               Browse Files
             </button>
             <button
               onClick={() => setShowCamera(true)}
               disabled={uploading}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-4 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               <Camera className="h-3.5 w-3.5" />
               Use Camera
             </button>
           </div>
           {uploading && (
-            <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-indigo-500">
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-amber-600 dark:text-amber-500">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Processing invoice...
             </p>
           )}
           {uploadError && <p className="mt-2 text-xs text-red-500">{uploadError}</p>}
         </div>
 
-        <div className="col-span-2 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 p-5 text-white shadow-sm">
+        <div className="col-span-2 rounded-xl bg-zinc-900 p-5 text-white shadow-sm">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-indigo-200">Review Queue</p>
+              <p className="text-sm font-medium text-zinc-300">Review Queue</p>
               <p className="mt-1 text-2xl font-bold">
                 {needsReviewCount} invoice{needsReviewCount === 1 ? '' : 's'} need review
               </p>
-              <div className="mt-3 flex items-center gap-4 text-sm text-indigo-100">
+              <div className="mt-3 flex items-center gap-4 text-sm text-zinc-300">
                 <span className="flex items-center gap-1.5">
                   <ScanLine className="h-4 w-4" />
                   YOLO: Field Detection
@@ -225,8 +227,8 @@ export default function Invoices() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-100 p-4 dark:border-slate-800">
+      <div className="rounded-xl border border-zinc-200 bg-white shadow-sm transition-colors dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex items-center justify-between border-b border-zinc-100 p-4 dark:border-zinc-800">
           <div className="flex gap-2">
             {REVIEW_FILTERS.map((filter) => (
               <button
@@ -234,8 +236,8 @@ export default function Invoices() {
                 onClick={() => setReviewFilter(filter)}
                 className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
                   reviewFilter === filter
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                    ? 'bg-zinc-900 text-white'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
                 }`}
               >
                 {filter}
@@ -244,14 +246,14 @@ export default function Invoices() {
           </div>
         </div>
 
-        <div className="relative border-b border-slate-100 p-4 dark:border-slate-800">
-          <Search className="pointer-events-none absolute left-7 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <div className="relative border-b border-zinc-100 p-4 dark:border-zinc-800">
+          <Search className="pointer-events-none absolute left-7 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by invoice number or vendor..."
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-800"
+            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pl-10 pr-3 text-sm text-zinc-700 placeholder:text-zinc-400 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:bg-zinc-800"
           />
         </div>
 
@@ -261,9 +263,9 @@ export default function Invoices() {
           </div>
         )}
 
-        <div className="divide-y divide-slate-50 dark:divide-slate-800/60">
+        <div className="divide-y divide-zinc-50 dark:divide-zinc-800/60">
           {filtered.length === 0 && !loadError && (
-            <p className="px-5 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+            <p className="px-5 py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">
               No invoices yet. Upload a file or use the camera to process one.
             </p>
           )}
@@ -272,29 +274,29 @@ export default function Invoices() {
             return (
               <div
                 key={inv.id}
-                className="flex cursor-pointer items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                className="flex cursor-pointer items-center gap-4 px-5 py-3.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
                 onClick={() => setSelectedId(inv.id)}
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500 dark:bg-indigo-500/10 dark:text-indigo-300">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
                   <Receipt className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
+                  <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">
                     {inv.invoice_number || `Invoice #${inv.id}`}
                   </p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
                     {inv.vendor || 'Unknown vendor'} • {inv.date || 'no date detected'}
                   </p>
                 </div>
                 <div className="w-24 text-right">
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
                     {inv.total != null ? `${inv.currency ?? ''} ${inv.total}`.trim() : '—'}
                   </p>
                 </div>
                 <div className="w-32">
                   {confidencePct != null ? (
                     <div className="flex items-center gap-2">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                         <div
                           className={`h-full rounded-full ${
                             confidencePct >= 90 ? 'bg-emerald-500' : confidencePct >= 75 ? 'bg-amber-500' : 'bg-red-500'
@@ -302,10 +304,10 @@ export default function Invoices() {
                           style={{ width: `${confidencePct}%` }}
                         />
                       </div>
-                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{confidencePct}%</span>
+                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{confidencePct}%</span>
                     </div>
                   ) : (
-                    <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
+                    <span className="text-xs text-zinc-400 dark:text-zinc-500">—</span>
                   )}
                 </div>
                 <span
@@ -321,7 +323,7 @@ export default function Invoices() {
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => setSelectedId(inv.id)}
-                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                    className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
                   >
                     <Eye className="h-4 w-4" />
                   </button>
@@ -338,20 +340,20 @@ export default function Invoices() {
 
       {selectedInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-zinc-900">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
+              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
                 {selectedInvoice.invoice_number || `Invoice #${selectedInvoice.id}`}
               </p>
               <button
                 onClick={() => setSelectedId(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="space-y-4 p-5">
-              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
                 <span>
                   Status:{' '}
                   {selectedInvoice.needs_review ? (
@@ -366,7 +368,7 @@ export default function Invoices() {
                 <button
                   onClick={() => handleToggleReview(selectedInvoice)}
                   disabled={flagging}
-                  className="ml-auto flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="ml-auto flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
                 >
                   {flagging ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                   {selectedInvoice.needs_review ? 'Mark Reviewed' : 'Flag for Review'}
@@ -375,8 +377,8 @@ export default function Invoices() {
 
               {selectedDocument && (
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Detected Regions</p>
-                  <div className="relative overflow-hidden rounded-lg border border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800">
+                  <p className="mb-2 text-xs font-semibold uppercase text-zinc-400">Detected Regions</p>
+                  <div className="relative overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800">
                     <img
                       ref={detailImgRef}
                       src={documentImageUrl(selectedInvoice.document_id)}
@@ -396,23 +398,23 @@ export default function Invoices() {
               )}
 
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Extracted Fields</p>
-                <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 p-3 text-sm dark:border-slate-800">
+                <p className="mb-2 text-xs font-semibold uppercase text-zinc-400">Extracted Fields</p>
+                <div className="grid grid-cols-2 gap-2 rounded-lg border border-zinc-100 p-3 text-sm dark:border-zinc-800">
                   <div>
-                    <p className="text-xs text-slate-400">Invoice Number</p>
-                    <p className="text-slate-700 dark:text-slate-200">{selectedInvoice.invoice_number ?? '—'}</p>
+                    <p className="text-xs text-zinc-400">Invoice Number</p>
+                    <p className="text-zinc-700 dark:text-zinc-200">{selectedInvoice.invoice_number ?? '—'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Vendor</p>
-                    <p className="text-slate-700 dark:text-slate-200">{selectedInvoice.vendor ?? '—'}</p>
+                    <p className="text-xs text-zinc-400">Vendor</p>
+                    <p className="text-zinc-700 dark:text-zinc-200">{selectedInvoice.vendor ?? '—'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Date</p>
-                    <p className="text-slate-700 dark:text-slate-200">{selectedInvoice.date ?? '—'}</p>
+                    <p className="text-xs text-zinc-400">Date</p>
+                    <p className="text-zinc-700 dark:text-zinc-200">{selectedInvoice.date ?? '—'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Total</p>
-                    <p className="text-slate-700 dark:text-slate-200">
+                    <p className="text-xs text-zinc-400">Total</p>
+                    <p className="text-zinc-700 dark:text-zinc-200">
                       {selectedInvoice.total != null ? `${selectedInvoice.currency ?? ''} ${selectedInvoice.total}`.trim() : '—'}
                     </p>
                   </div>
@@ -421,12 +423,67 @@ export default function Invoices() {
 
               {selectedInvoice.items?.length > 0 && (
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Raw OCR Rows</p>
-                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  <p className="mb-2 text-xs font-semibold uppercase text-zinc-400">Raw OCR Rows</p>
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                     {selectedInvoice.items.map((row, i) => (
                       <p key={i}>{row.join('  ')}</p>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {selectedDocument && (selectedDocument.raw_text || selectedDocument.structured_json?.regions_text) && (
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase text-zinc-400">Extracted Text</p>
+                    <div className="flex rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-700">
+                      <button
+                        onClick={() => setTextMode('boxes')}
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          textMode === 'boxes'
+                            ? 'bg-zinc-900 text-white'
+                            : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+                        }`}
+                      >
+                        Boxes Only
+                      </button>
+                      <button
+                        onClick={() => setTextMode('all')}
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          textMode === 'all'
+                            ? 'bg-zinc-900 text-white'
+                            : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+                        }`}
+                      >
+                        All Text
+                      </button>
+                    </div>
+                  </div>
+
+                  {textMode === 'boxes' ? (
+                    Object.keys(selectedDocument.structured_json?.regions_text || {}).length > 0 ? (
+                      <div className="space-y-2 rounded-lg border border-zinc-100 p-3 text-sm dark:border-zinc-800">
+                        {Object.entries(selectedDocument.structured_json.regions_text).map(([label, texts]) => (
+                          <div key={label}>
+                            <p className="text-xs font-medium text-amber-600 dark:text-amber-500">{label}</p>
+                            {texts.map((t, i) => (
+                              <p key={i} className="whitespace-pre-wrap text-zinc-700 dark:text-zinc-200">
+                                {t}
+                              </p>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="rounded-lg border border-zinc-100 p-3 text-sm text-zinc-400 dark:border-zinc-800">
+                        No detected boxes had readable text.
+                      </p>
+                    )
+                  ) : (
+                    <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                      {selectedDocument.raw_text || '(no text extracted)'}
+                    </pre>
+                  )}
                 </div>
               )}
             </div>

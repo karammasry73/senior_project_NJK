@@ -110,9 +110,9 @@ export default function CameraCapture({ onCapture, onClose, domain = 'exams' }) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-xl dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+      <div className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-xl dark:bg-zinc-900">
+        <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
             {photo ? 'Review photo' : 'Capture document'}
           </p>
           <div className="flex items-center gap-2">
@@ -126,7 +126,7 @@ export default function CameraCapture({ onCapture, onClose, domain = 'exams' }) 
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   liveMode
                     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                    : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700'
                 }`}
               >
                 <ScanEye className="h-3.5 w-3.5" />
@@ -135,7 +135,7 @@ export default function CameraCapture({ onCapture, onClose, domain = 'exams' }) 
             )}
             <button
               onClick={onClose}
-              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+              className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"
             >
               <X className="h-4 w-4" />
             </button>
@@ -144,7 +144,7 @@ export default function CameraCapture({ onCapture, onClose, domain = 'exams' }) 
 
         <div className="relative aspect-[4/3] w-full bg-black">
           {error ? (
-            <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-300">
+            <div className="flex h-full items-center justify-center p-6 text-center text-sm text-zinc-300">
               {error}. Check camera permissions and try again, or upload a file instead.
             </div>
           ) : photo ? (
@@ -172,14 +172,14 @@ export default function CameraCapture({ onCapture, onClose, domain = 'exams' }) 
             <>
               <button
                 onClick={handleRetake}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
                 <RotateCcw className="h-4 w-4" />
                 Retake
               </button>
               <button
                 onClick={handleUsePhoto}
-                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                className="flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
               >
                 <Check className="h-4 w-4" />
                 Use photo
@@ -188,7 +188,7 @@ export default function CameraCapture({ onCapture, onClose, domain = 'exams' }) 
           ) : (
             <button
               onClick={handleCapture}
-              className="flex items-center gap-2 rounded-full bg-indigo-600 p-4 text-white shadow-lg hover:bg-indigo-700"
+              className="flex items-center gap-2 rounded-full bg-zinc-900 p-4 text-white shadow-lg hover:bg-zinc-800"
               aria-label="Capture photo"
             >
               <Camera className="h-6 w-6" />

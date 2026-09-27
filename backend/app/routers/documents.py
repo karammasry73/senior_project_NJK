@@ -1,15 +1,16 @@
+import asyncio
 import json
 import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import db_session
-from app.models.schemas import DetectPreviewResponse, DocumentDetail, DocumentOut, RegionOut
-from app.services import document_pipeline, field_patterns, ocr_processor, yolo_detector
+from app.models.schemas import DetectPreviewResponse, DocumentDetail, DocumentOut, FlushResponse, RegionOut
+from app.services import auth, document_pipeline, field_patterns, ocr_processor, yolo_detector
 
 # Rate-limit OCR in the live preview loop the same way the reference desktop
 # scripts do (OCR_NEW_PER_FRAME=4): only the top-N highest-confidence regions
@@ -116,7 +117,11 @@ async def detect_preview(file: UploadFile, domain: str = "exams") -> DetectPrevi
             try:
                 # 0.5 (at least 50% confidence) - same floor as the full pipeline,
                 # so live preview doesn't show boxes it wouldn't trust on capture.
-                raw_regions = yolo_detector.detect_regions(tmp.name, domain=domain)
+                # Runs in a thread: this endpoint gets hit every ~1.5s while the
+                # camera is open, and YOLO inference is synchronous/CPU-bound - left
+                # on the event loop, it would stall every other request in the app
+                # for the full duration of each detection, every single frame.
+                raw_regions = await asyncio.to_thread(yolo_detector.detect_regions, tmp.name, domain=domain)
             except Exception as exc:  # noqa: BLE001 - a failed preview frame just yields no boxes
                 print(f"detect-preview failed: {exc}")
                 raw_regions = []
@@ -124,26 +129,30 @@ async def detect_preview(file: UploadFile, domain: str = "exams") -> DetectPrevi
             ocr_budget = sorted(raw_regions, key=lambda r: r["confidence"], reverse=True)[:_LIVE_OCR_MAX_REGIONS]
             ocr_ids = {id(r) for r in ocr_budget}
 
-            regions = []
-            for r in raw_regions:
-                text = None
-                if id(r) in ocr_ids:
-                    x1, y1, x2, y2 = r["box"]
-                    crop = img.crop((max(0, x1), max(0, y1), min(width, x2), min(height, y2)))
-                    if crop.width >= 4 and crop.height >= 4:
-                        with tempfile.NamedTemporaryFile(suffix=".png") as crop_tmp:
-                            crop.save(crop_tmp.name)
-                            crop_result = ocr_processor.extract_text(crop_tmp.name)
-                            text = crop_result["full_text"].strip() or None
-                regions.append(
-                    RegionOut(
-                        label=r["label"],
-                        confidence=r["confidence"],
-                        box=r["box"],
-                        text=text,
-                        pattern_match=field_patterns.check_pattern(domain, r["label"], text or ""),
+            def _ocr_regions() -> list[RegionOut]:
+                out = []
+                for r in raw_regions:
+                    text = None
+                    if id(r) in ocr_ids:
+                        x1, y1, x2, y2 = r["box"]
+                        crop = img.crop((max(0, x1), max(0, y1), min(width, x2), min(height, y2)))
+                        if crop.width >= 4 and crop.height >= 4:
+                            with tempfile.NamedTemporaryFile(suffix=".png") as crop_tmp:
+                                crop.save(crop_tmp.name)
+                                crop_result = ocr_processor.extract_text(crop_tmp.name)
+                                text = crop_result["full_text"].strip() or None
+                    out.append(
+                        RegionOut(
+                            label=r["label"],
+                            confidence=r["confidence"],
+                            box=r["box"],
+                            text=text,
+                            pattern_match=field_patterns.check_pattern(domain, r["label"], text or ""),
+                        )
                     )
-                )
+                return out
+
+            regions = await asyncio.to_thread(_ocr_regions)
 
     return DetectPreviewResponse(regions=regions, image_width=width, image_height=height)
 
@@ -184,6 +193,23 @@ async def delete_document(document_id: int) -> None:
             raise HTTPException(status_code=404, detail="Document not found")
         Path(row["file_path"]).unlink(missing_ok=True)
         conn.execute("DELETE FROM documents WHERE id = ?", (document_id,))
+
+
+@router.delete("/flush/all", response_model=FlushResponse, dependencies=[Depends(auth.require_admin)])
+async def flush_documents() -> FlushResponse:
+    """Admin-only: wipes every uploaded document (and, via ON DELETE CASCADE, every
+    invoice derived from one) - both the DB rows and the files on disk. Used by the
+    Settings page's "Clear all documents & invoices" danger-zone action."""
+    with db_session() as conn:
+        rows = conn.execute("SELECT file_path FROM documents").fetchall()
+        count = len(rows)
+        for row in rows:
+            Path(row["file_path"]).unlink(missing_ok=True)
+            # PDFs also leave a rendered .page1.png next to the original - clean that up too.
+            page_png = Path(row["file_path"]).with_suffix(".page1.png")
+            page_png.unlink(missing_ok=True)
+        conn.execute("DELETE FROM documents")
+    return FlushResponse(deleted=count)
 
 
 @router.post("/summarize")

@@ -105,6 +105,12 @@ export function deleteDocument(id) {
   return request(`/documents/${id}`, { method: 'DELETE' });
 }
 
+export function flushDocuments() {
+  // Admin-only - wipes every uploaded document AND every invoice derived from
+  // one (invoices cascade-delete with their parent document server-side).
+  return request('/documents/flush/all', { method: 'DELETE' });
+}
+
 export function documentImageUrl(id) {
   // Plain <img src> tags can't carry an Authorization header, so the token
   // rides in the query string here specifically - see auth.py's get_current_user.
@@ -144,6 +150,18 @@ export function getSystemStatus() {
   return request('/system/status');
 }
 
+export function getStats() {
+  return request('/settings/stats');
+}
+
+export function chatWithAssistant(message) {
+  return request('/voice/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+}
+
 export function getEmailAuthStatus() {
   return request('/emails/auth/status');
 }
@@ -152,8 +170,12 @@ export function getEmailAuthUrl() {
   return request('/emails/auth/url');
 }
 
-export function syncEmails() {
-  return request('/emails/sync', { method: 'POST' });
+export function syncEmails(after, before) {
+  const params = new URLSearchParams();
+  if (after) params.set('after', String(after));
+  if (before) params.set('before', String(before));
+  const qs = params.toString();
+  return request(`/emails/sync${qs ? `?${qs}` : ''}`, { method: 'POST' });
 }
 
 export function listEmails() {
@@ -172,8 +194,9 @@ export function summarizeEmail(id) {
   return request(`/emails/${id}/summarize`, { method: 'POST' });
 }
 
-export function draftEmail(id) {
-  return request(`/emails/${id}/draft`, { method: 'POST' });
+export function draftEmail(id, instructions) {
+  const qs = instructions ? `?instructions=${encodeURIComponent(instructions)}` : '';
+  return request(`/emails/${id}/draft${qs}`, { method: 'POST' });
 }
 
 export function sendEmail(id, body) {
@@ -182,4 +205,47 @@ export function sendEmail(id, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ body }),
   });
+}
+
+export function markEmailRead(id, read) {
+  return request(`/emails/${id}/mark`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ read }),
+  });
+}
+
+export function deleteEmail(id) {
+  return request(`/emails/${id}`, { method: 'DELETE' });
+}
+
+export function restoreEmail(email) {
+  return request('/emails/restore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function saveEmailPosition(id, x, y) {
+  return request(`/emails/${id}/position`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ x, y }),
+  });
+}
+
+export function nameSender(id, name) {
+  return request(`/emails/${id}/name-sender`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function attachmentUrl(emailId, attachmentId) {
+  // Plain <a href> download links can't carry an Authorization header, so
+  // the token rides in the query string - same fallback as documentImageUrl.
+  const token = getToken();
+  return `${BASE}/emails/${emailId}/attachments/${attachmentId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 }
